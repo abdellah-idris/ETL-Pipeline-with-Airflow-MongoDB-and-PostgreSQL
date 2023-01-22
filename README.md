@@ -1,9 +1,12 @@
 # ETL
 
 # idea 
-    Extract : Twitter : News (API)
-    Transform : Cleaning ...
-    Load : To DB 
+    
+Extract : amazon price evolution (avoid arnaque )
+
+Transform : Cleaning ...
+
+Load : To DB 
 
 # Techs 
     
