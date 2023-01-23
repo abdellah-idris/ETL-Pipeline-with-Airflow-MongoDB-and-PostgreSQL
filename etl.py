@@ -3,7 +3,7 @@ from transform import transform_impl
 import argparse
 
 parser = argparse.ArgumentParser(description='Twitter accounts')
-parser.add_argument('--accounts', nargs='+', default=[],help='twitter accounts for retrieving tweets, must be a String')
+parser.add_argument('--accounts', nargs='+', default=[], help='twitter accounts for retrieving tweets, must be a String')
 
 
 args = parser.parse_args()
