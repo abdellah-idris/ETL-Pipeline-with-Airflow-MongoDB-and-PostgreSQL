@@ -1,4 +1,4 @@
-from tweeter_api import connect
+from connexion import connect
 
 api = connect.api_connect()
 
