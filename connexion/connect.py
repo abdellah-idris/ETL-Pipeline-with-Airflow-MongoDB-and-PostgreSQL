@@ -25,11 +25,11 @@ def api_connect():
 
 
 def mongo_connect():
-    # Creating a MongoDB connection
-    client = pymongo.MongoClient(URI, serverSelectionTimeoutMS=5000)
+    print('Creating a MongoDB connection')
     try:
-        print(client.server_info())
+        client = pymongo.MongoClient(URI, serverSelectionTimeoutMS=10000)
         return client
     except Exception:
         print("Unable to connect to the server.")
+        raise Exception
 
