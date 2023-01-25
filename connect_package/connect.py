@@ -30,6 +30,6 @@ def mongo_connect():
         client = pymongo.MongoClient(URI, serverSelectionTimeoutMS=10000)
         return client
     except Exception:
-        print("Unable to connect to the server.")
+        print("Unable to connect to mongo server.")
         raise Exception
 
