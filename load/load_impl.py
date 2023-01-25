@@ -1,4 +1,4 @@
-from connexion import connect
+from connect_package import connect
 
 
 def load(data):
