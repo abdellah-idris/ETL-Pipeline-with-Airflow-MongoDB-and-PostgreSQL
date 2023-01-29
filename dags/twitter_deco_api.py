@@ -43,38 +43,42 @@ default_args = {
 }
 
 
-@dag(dag_id='twitter_api_v14',
+@dag(dag_id='twitter_api_v0',
      default_args=default_args,
      start_date=datetime(2023, 1, 29),
      schedule_interval=timedelta(minutes=30))
 def twitter_etl():
 
     @task(multiple_outputs=True)
-    def extract_transform(user_name, tweets_count):
-        print('Extracting tweets from user: {}'.format(user_name))
-        # get user tweets
-        tweets = api.user_timeline(screen_name='@{}'.format(user_name),
-                                   count=tweets_count,
-                                   include_rts=False,
-                                   tweet_mode='extended')
-        # TODO : Transform the data
-        for tweet in tweets:
-            text= tweet._json['full_text']
-        if not tweets:
-            print('No tweets found')
-            return {
-                'tweet': '',
-                'user_name': user_name
-            }
+    def extract_transform(users, tweets_count):
+        print('<<< Extracting data from Twitter API')
+        data = {}
+        for user_name in users:
+
+            print('Extracting tweets from user: {}'.format(user_name))
+            # get user tweets
+            tweets = api.user_timeline(screen_name='@{}'.format(user_name),
+                                       count=tweets_count,
+                                       include_rts=False,
+                                       tweet_mode='extended'
+                                       )
+            # TODO : Transform the data
+            for tweet in tweets:
+                print('Extracted tweet :', tweet)
+                if  user_name not in data.keys():
+                    data[user_name] = tweet._json['full_text']
+                else:
+                    data[user_name] = data[user_name] + ';;' + tweet._json['full_text']
+        print('Exported data :', data)
+        print('>>> Data extracted successfully')
         return {
-            'tweet': text,
-            'user_name': user_name
+            'data': data,
         }
 
 
     @task()
     def clear():
-        print('clear data from MongoDB')
+        print('<<< Clear data from MongoDB')
         client = mongo_connect()
         # Select the database and collection
         print(client.list_database_names())
@@ -83,10 +87,12 @@ def twitter_etl():
         collection = db['NEWS']
 
         collection.delete_many({})
-        print('Data cleared successfully')
+        print('>>> Data cleared successfully')
 
     @task()
-    def load(user_name, data):
+    def load(data):
+        print('<<< Loading data into MongoDB')
+        tweets = []
         print('Loading data into MongoDB')
         client = mongo_connect()
         # Select the database and collection
@@ -95,29 +101,32 @@ def twitter_etl():
         db = client['etl']
         collection = db['NEWS']
         # Insert the data into the collection
-        news = {
-            user_name: {
-                'TWEET_INFO': {
-                    'text': []
-                },
-                # "USER_INFO": {
-                #     "description": ''
-                # }
+        for user_name in data.keys():
+            print('Data to load :', data[user_name])
+            user_tweet = {
+                user_name: {
+                    'TWEET_INFO': {
+                        'text': []
+                    },
+                    # "USER_INFO": {
+                    #     "description": ''
+                    # }
+                }
             }
-        }
-
-        news[user_name]['TWEET_INFO']['text'].append(data)
-        print(news)
-        if data != '' and data is not None:
-            collection.insert(news)
-            print('Data loaded successfully')
+            extracted_tweet = data[user_name].split(';;')
+            for tweet in extracted_tweet:
+                user_tweet[user_name]['TWEET_INFO']['text'].append(tweet)
+            tweets.append(user_tweet)
+        if tweets != '' and tweets is not None:
+            collection.insert_many(tweets)
+            print('>>> Data loaded successfully')
         else:
             print('Empty data')
         client.close()
-
-    extract_dict = extract_transform('Le_Figaro', 1)
+    twitter_accounts= Variable.get('Tweeter_Accounts').split(',')
+    extract_dict = extract_transform(twitter_accounts, 2)
     clear()
-    load(user_name=extract_dict['user_name'], text=extract_dict['tweet'])
+    load(extract_dict['data'])
 
 
 etl_dag = twitter_etl()
