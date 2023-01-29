@@ -15,7 +15,7 @@ consumer_secret = Variable.get('CONSUMER_SECRET')
 auth = tweepy.OAuthHandler(access_key, access_secret)
 auth.set_access_token(consumer_key, consumer_secret)
 
-mongo_password = Variable.get('MONGO_PASSWORD')
+mongo_password = Variable.get('MONGO')
 URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
 
 
@@ -43,7 +43,7 @@ default_args = {
 }
 
 
-@dag(dag_id='twitter_api_v11',
+@dag(dag_id='twitter_api_v14',
      default_args=default_args,
      start_date=datetime(2023, 1, 29),
      schedule_interval=timedelta(minutes=2))
@@ -90,10 +90,8 @@ def twitter_etl():
         print(client.list_database_names())
 
         db = client['etl']
-        # TODO: this will be a parameter args.collection
         collection = db['NEWS']
         # Insert the data into the collection
-        # TODO: check that the document is not empty
         news = {
             user_name: {
                 'TWEET_INFO': {

@@ -18,7 +18,7 @@ consumer_secret = Variable.get('CONSUMER_SECRET')
 auth = tweepy.OAuthHandler(access_key, access_secret)
 auth.set_access_token(consumer_key, consumer_secret)
 
-mongo_password = Variable.get('MONGO_PASSWORD')
+mongo_password = Variable.get('MONGO')
 URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
 
 
@@ -81,7 +81,6 @@ def load_impl(ti):
     print(client.list_database_names())
 
     db = client['etl']
-    # TODO: this will be a parameter args.collection
     collection = db['NEWS']
     # Insert the data into the collection
     if data:
