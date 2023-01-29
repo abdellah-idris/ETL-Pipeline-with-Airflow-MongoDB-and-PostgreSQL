@@ -46,17 +46,18 @@ default_args = {
 @dag(dag_id='twitter_api_v14',
      default_args=default_args,
      start_date=datetime(2023, 1, 29),
-     schedule_interval=timedelta(minutes=2))
+     schedule_interval=timedelta(minutes=30))
 def twitter_etl():
 
     @task(multiple_outputs=True)
-    def extract(user_name, tweets_count):
+    def extract_transform(user_name, tweets_count):
         print('Extracting tweets from user: {}'.format(user_name))
         # get user tweets
         tweets = api.user_timeline(screen_name='@{}'.format(user_name),
                                    count=tweets_count,
                                    include_rts=False,
                                    tweet_mode='extended')
+        # TODO : Transform the data
         for tweet in tweets:
             text= tweet._json['full_text']
         if not tweets:
@@ -70,17 +71,19 @@ def twitter_etl():
             'user_name': user_name
         }
 
-    @task(multiple_outputs=True)
-    def transform(user_name, text):
-        print('Transforming tweets from user: {}'.format(user_name))
-        print('text :',text)
 
-        return {
-            'data' : text
-            }
+    @task()
+    def clear():
+        print('clear data from MongoDB')
+        client = mongo_connect()
+        # Select the database and collection
+        print(client.list_database_names())
 
-    # TODO: add a clear collection task
+        db = client['etl']
+        collection = db['NEWS']
 
+        collection.delete_many({})
+        print('Data cleared successfully')
 
     @task()
     def load(user_name, data):
@@ -112,9 +115,9 @@ def twitter_etl():
             print('Empty data')
         client.close()
 
-    extract_dict = extract('elonmusk', 1)
-    data_dict = transform(user_name=extract_dict['user_name'], text=extract_dict['tweet'])
-    load(user_name=extract_dict['user_name'], data = data_dict['data'])
+    extract_dict = extract_transform('Le_Figaro', 1)
+    clear()
+    load(user_name=extract_dict['user_name'], text=extract_dict['tweet'])
 
 
 etl_dag = twitter_etl()
