@@ -55,6 +55,7 @@ def twitter_etl():
     def extract_transform(users, tweets_count):
         print('<<< Extracting data from Twitter API')
         data = {}
+        date = {}
         for user_name in users:
 
             print('Extracting tweets from user: {}'.format(user_name))
@@ -69,12 +70,16 @@ def twitter_etl():
                 print('Extracted tweet :', tweet)
                 if  user_name not in data.keys():
                     data[user_name] = tweet._json['full_text']
+                    date[user_name] = tweet.created_at.strftime('%m/%d/%Y:%H:%M')
                 else:
                     data[user_name] = data[user_name] + ';;' + tweet._json['full_text']
+                    date[user_name] = date[user_name] + ';;' + tweet.created_at.strftime('%m/%d/%Y:%H:%M')
+
         print('Exported data :', data)
         print('>>> Data extracted successfully')
         return {
             'data': data,
+            'date' : date
         }
 
 
@@ -92,7 +97,7 @@ def twitter_etl():
         print('>>> Data cleared successfully')
 
     @task()
-    def load(data):
+    def load(data, date):
         print('<<< Loading data into MongoDB')
         tweets = []
         print('Loading data into MongoDB')
@@ -108,7 +113,8 @@ def twitter_etl():
             user_tweet = {
                 user_name: {
                     'TWEET_INFO': {
-                        'text': []
+                        'text': [],
+                        "created_at": []
                     },
                     # "USER_INFO": {
                     #     "description": ''
@@ -116,8 +122,11 @@ def twitter_etl():
                 }
             }
             extracted_tweet = data[user_name].split(';;')
+            extracted_date = date[user_name].split(';;')
             for tweet in extracted_tweet:
                 user_tweet[user_name]['TWEET_INFO']['text'].append(tweet)
+            for created_at_date in extracted_date:
+                user_tweet[user_name]["TWEET_INFO"]['created_at'].append(created_at_date)
             tweets.append(user_tweet)
         if tweets != '' and tweets is not None:
             collection.insert_many(tweets)
@@ -125,10 +134,11 @@ def twitter_etl():
         else:
             print('Empty data')
         client.close()
+
     twitter_accounts= Variable.get('Tweeter_Accounts').split(',')
     extract_dict = extract_transform(twitter_accounts, tweets_count)
     clear()
-    load(extract_dict['data'])
+    load(extract_dict['data'], extract_dict['date'])
 
 
 etl_dag = twitter_etl()
