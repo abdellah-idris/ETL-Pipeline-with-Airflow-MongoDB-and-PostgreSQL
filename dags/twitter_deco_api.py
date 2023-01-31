@@ -5,6 +5,7 @@ import pymongo
 import tweepy
 
 
+
 # Access variables
 access_key = Variable.get('ACCESS_TOKEN')
 access_secret = Variable.get('ACCESS_TOKEN_SECRET')
@@ -14,6 +15,7 @@ consumer_secret = Variable.get('CONSUMER_SECRET')
 # Twitter authentication
 auth = tweepy.OAuthHandler(access_key, access_secret)
 auth.set_access_token(consumer_key, consumer_secret)
+tweets_account = int(Variable.get('Tweets_count'))
 
 mongo_password = Variable.get('MONGO')
 URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
@@ -46,7 +48,7 @@ default_args = {
 @dag(dag_id='twitter_api_v0',
      default_args=default_args,
      start_date=datetime(2023, 1, 29),
-     schedule_interval=timedelta(minutes=30))
+     schedule_interval=timedelta(minutes=60))
 def twitter_etl():
 
     @task(multiple_outputs=True)
@@ -124,7 +126,7 @@ def twitter_etl():
             print('Empty data')
         client.close()
     twitter_accounts= Variable.get('Tweeter_Accounts').split(',')
-    extract_dict = extract_transform(twitter_accounts, 2)
+    extract_dict = extract_transform(twitter_accounts, tweets_account)
     clear()
     load(extract_dict['data'])
 
