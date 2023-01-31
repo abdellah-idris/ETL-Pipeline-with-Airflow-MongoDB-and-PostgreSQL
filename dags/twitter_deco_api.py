@@ -5,6 +5,7 @@ import pymongo
 import tweepy
 
 
+
 # Access variables
 access_key = Variable.get('ACCESS_TOKEN')
 access_secret = Variable.get('ACCESS_TOKEN_SECRET')
@@ -14,6 +15,7 @@ consumer_secret = Variable.get('CONSUMER_SECRET')
 # Twitter authentication
 auth = tweepy.OAuthHandler(access_key, access_secret)
 auth.set_access_token(consumer_key, consumer_secret)
+tweet_count = int(Variable.get('Tweets_count'))
 
 mongo_password = Variable.get('MONGO')
 URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
@@ -25,12 +27,13 @@ def api_connect():
 
 
 def mongo_connect():
-    print('Creating a MongoDB connection')
+    print('>>> Creating a MongoDB connection')
+
     try:
         client = pymongo.MongoClient(URI, serverSelectionTimeoutMS=10000)
         return client
     except Exception:
-        print("Unable to connect to mongo server.")
+        print("ERROR : Unable to connect to mongo server.")
         raise Exception
 
 
@@ -46,13 +49,18 @@ default_args = {
 @dag(dag_id='twitter_api_v0',
      default_args=default_args,
      start_date=datetime(2023, 1, 29),
-     schedule_interval=timedelta(minutes=30))
+     schedule_interval=timedelta(minutes=60))
 def twitter_etl():
 
     @task(multiple_outputs=True)
     def extract_transform(users, tweets_count):
         print('<<< Extracting data from Twitter API')
         data = {}
+        date = {}
+        followers_count = {}
+        following_count = {}
+        created_at = {}
+        description = {}
         for user_name in users:
 
             print('Extracting tweets from user: {}'.format(user_name))
@@ -64,15 +72,31 @@ def twitter_etl():
                                        )
             # TODO : Transform the data
             for tweet in tweets:
-                print('Extracted tweet :', tweet)
+                print('Extracted tweet : {}'.format( tweet))
+
                 if  user_name not in data.keys():
                     data[user_name] = tweet._json['full_text']
+                    date[user_name] = tweet.created_at.strftime('%m/%d/%Y:%H:%M')
                 else:
                     data[user_name] = data[user_name] + ';;' + tweet._json['full_text']
-        print('Exported data :', data)
+                    date[user_name] = date[user_name] + ';;' + tweet.created_at.strftime('%m/%d/%Y:%H:%M')
+
+            user = api.get_user(screen_name=user_name)
+            followers_count[user_name] = user.followers_count
+            following_count[user_name] = user.friends_count
+            created_at[user_name] = user.created_at.strftime('%m/%d/%Y:%H:%M')
+            description[user_name] = user.description
+
+        print('Exported data : {}'.format(data) )
         print('>>> Data extracted successfully')
+
         return {
             'data': data,
+            'date' : date,
+            'followers_count' : followers_count,
+            'following_count' : following_count,
+            'created_at' : created_at,
+            'description' : description
         }
 
 
@@ -90,43 +114,64 @@ def twitter_etl():
         print('>>> Data cleared successfully')
 
     @task()
-    def load(data):
+    def load(data, date, followers_count, following_count, created_at, description):
         print('<<< Loading data into MongoDB')
         tweets = []
-        print('Loading data into MongoDB')
+
         client = mongo_connect()
         # Select the database and collection
-        print(client.list_database_names())
-
         db = client['etl']
         collection = db['NEWS']
+
         # Insert the data into the collection
         for user_name in data.keys():
-            print('Data to load :', data[user_name])
             user_tweet = {
                 user_name: {
                     'TWEET_INFO': {
-                        'text': []
+                        'text': [],
+                        "created_at": []
                     },
-                    # "USER_INFO": {
-                    #     "description": ''
-                    # }
+                    "USER_INFO": {
+                        "followers_count": '',
+                        "following_count": '',
+                        "created_at": '',
+                        "description": ''
+                    }
                 }
             }
+
             extracted_tweet = data[user_name].split(';;')
+            extracted_date = date[user_name].split(';;')
+            extracted_followers_count = followers_count[user_name]
+            extracted_following_count = following_count[user_name]
+            extracted_created_at = created_at[user_name]
+            extracted_description = description[user_name]
+
             for tweet in extracted_tweet:
                 user_tweet[user_name]['TWEET_INFO']['text'].append(tweet)
+
+            for created_at_date in extracted_date:
+                user_tweet[user_name]["TWEET_INFO"]['created_at'].append(created_at_date)
+
+            user_tweet[user_name]["USER_INFO"]['followers_count'] = extracted_followers_count
+            user_tweet[user_name]["USER_INFO"]['following_count'] = extracted_following_count
+            user_tweet[user_name]["USER_INFO"]['created_at'] = extracted_created_at
+            user_tweet[user_name]["USER_INFO"]['description'] = extracted_description
+
             tweets.append(user_tweet)
+
         if tweets != '' and tweets is not None:
             collection.insert_many(tweets)
+            print('<<< Data loaded {}'.format(tweets))
             print('>>> Data loaded successfully')
         else:
             print('Empty data')
         client.close()
+
     twitter_accounts= Variable.get('Tweeter_Accounts').split(',')
-    extract_dict = extract_transform(twitter_accounts, 2)
+    extract_dict = extract_transform(twitter_accounts, tweet_count)
     clear()
-    load(extract_dict['data'])
+    load(extract_dict['data'], extract_dict['date'], extract_dict['followers_count'], extract_dict['following_count'], extract_dict['created_at'], extract_dict['description'])
 
 
 etl_dag = twitter_etl()
