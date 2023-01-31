@@ -15,7 +15,7 @@ consumer_secret = Variable.get('CONSUMER_SECRET')
 # Twitter authentication
 auth = tweepy.OAuthHandler(access_key, access_secret)
 auth.set_access_token(consumer_key, consumer_secret)
-tweets_account = int(Variable.get('Tweets_count'))
+tweets_count = int(Variable.get('Tweets_count'))
 
 mongo_password = Variable.get('MONGO')
 URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
@@ -126,7 +126,7 @@ def twitter_etl():
             print('Empty data')
         client.close()
     twitter_accounts= Variable.get('Tweeter_Accounts').split(',')
-    extract_dict = extract_transform(twitter_accounts, tweets_account)
+    extract_dict = extract_transform(twitter_accounts, tweets_count)
     clear()
     load(extract_dict['data'])
 
