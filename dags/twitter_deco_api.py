@@ -1,39 +1,35 @@
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.models import Variable
-import pymongo
-import tweepy
 
-
-
-# Access variables
-access_key = Variable.get('ACCESS_TOKEN')
-access_secret = Variable.get('ACCESS_TOKEN_SECRET')
-consumer_key = Variable.get('CONSUMER_KEY')
-consumer_secret = Variable.get('CONSUMER_SECRET')
-
-# Twitter authentication
-auth = tweepy.OAuthHandler(access_key, access_secret)
-auth.set_access_token(consumer_key, consumer_secret)
-tweet_count = int(Variable.get('Tweets_count'))
-
-mongo_password = Variable.get('MONGO')
-URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
 
 
 def api_connect():
+    import tweepy
     # Creating an API object
+    # Access variables
+    access_key = Variable.get('ACCESS_TOKEN')
+    access_secret = Variable.get('ACCESS_TOKEN_SECRET')
+    consumer_key = Variable.get('CONSUMER_KEY')
+    consumer_secret = Variable.get('CONSUMER_SECRET')
+
+    # Twitter authentication
+    auth = tweepy.OAuthHandler(access_key, access_secret)
+    auth.set_access_token(consumer_key, consumer_secret)
     return tweepy.API(auth)
 
 
 def mongo_connect():
+    import pymongo
     print('>>> Creating a MongoDB connection')
 
     try:
+        mongo_password = Variable.get('MONGO')
+        URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
         client = pymongo.MongoClient(URI, serverSelectionTimeoutMS=10000)
         return client
     except Exception:
-        print("ERROR : Unable to connect to mongo server.")
+        print("[ERROR] : Unable to connect to mongo server.")
         raise Exception
 
 
@@ -41,7 +37,7 @@ api = api_connect()
 
 default_args = {
     'owner': 'idris',
-    'retries': 5,
+    'retries': 3,
     'retry_delay': timedelta(minutes=5)
 }
 
@@ -55,14 +51,15 @@ def twitter_etl():
     @task(multiple_outputs=True)
     def extract_transform(users, tweets_count):
         print('<<< Extracting data from Twitter API')
+
         data = {}
         date = {}
         followers_count = {}
         following_count = {}
         created_at = {}
         description = {}
-        for user_name in users:
 
+        for user_name in users:
             print('Extracting tweets from user: {}'.format(user_name))
             # get user tweets
             tweets = api.user_timeline(screen_name='@{}'.format(user_name),
@@ -70,7 +67,7 @@ def twitter_etl():
                                        include_rts=False,
                                        tweet_mode='extended'
                                        )
-            # TODO : Transform the data
+
             for tweet in tweets:
                 print('Extracted tweet : {}'.format( tweet))
 
@@ -87,7 +84,7 @@ def twitter_etl():
             created_at[user_name] = user.created_at.strftime('%m/%d/%Y:%H:%M')
             description[user_name] = user.description
 
-        print('Exported data : {}'.format(data) )
+        print('Extracted data : {}'.format(data) )
         print('>>> Data extracted successfully')
 
         return {
@@ -111,7 +108,7 @@ def twitter_etl():
         collection = db['NEWS']
 
         collection.delete_many({})
-        print('>>> Data cleared successfully')
+        print('>>> Data cleared successfully on {}'.format(collection))
 
     @task()
     def load(data, date, followers_count, following_count, created_at, description):
@@ -168,7 +165,10 @@ def twitter_etl():
             print('>>> [Warning] Empty data : no loaded data ')
         client.close()
 
+
+    tweet_count = int(Variable.get('Tweets_count'))
     twitter_accounts= Variable.get('Tweeter_Accounts').split(',')
+
     extract_dict = extract_transform(twitter_accounts, tweet_count)
     clear()
     load(extract_dict['data'], extract_dict['date'], extract_dict['followers_count'], extract_dict['following_count'], extract_dict['created_at'], extract_dict['description'])
