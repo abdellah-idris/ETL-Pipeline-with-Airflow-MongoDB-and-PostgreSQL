@@ -39,14 +39,14 @@ def twitter_postgres_dag():
     def create_postgres_table():
         print('<<< Creating a PostgreSQL table')
         pg = PostgresOperator(
-            task_id='create_postgres_tablev1',
+            task_id='create_postgres_table',
             postgres_conn_id='postgres_localhost',
             sql="""
-                create table if not exists tweets (
-                    id serial NOT NULL PRIMARY KEY,
-                    tweet json NOT NULL
+            CREATE TABLE IF NOT EXISTS  tweets (
+                id SERIAL NOT NULL PRIMARY KEY,
+                tweet json NOT NULL
                 );
-            """
+            """,
         )
         pg.execute(context=None)
 
@@ -100,15 +100,16 @@ def twitter_postgres_dag():
 
     @task()
     def transform(data, date, followers_count, following_count, created_at, description):
-        print('<<< Loading data into Postgresql')
+        import re
+        print('<<< Loading data into PostgreSQL')
         tweets = []
 
         # Insert the data into the collection
         for user_name in data.keys():
             user_tweet = {
                 user_name: {
-                    'TWEET_INFO': {
-                        'text': [],
+                    "TWEET_INFO": {
+                        "text": [],
                         "created_at": []
                     },
                     "USER_INFO": {
@@ -128,7 +129,12 @@ def twitter_postgres_dag():
             extracted_description = description[user_name]
 
             for tweet in extracted_tweet:
+
+                print('tweet before: {}'.format(tweet))
+                tweet = re.sub(r"'", r'', tweet)
+                print('tweet after: {}'.format(tweet))
                 user_tweet[user_name]['TWEET_INFO']['text'].append(tweet)
+
 
             for created_at_date in extracted_date:
                 user_tweet[user_name]["TWEET_INFO"]['created_at'].append(created_at_date)
@@ -136,7 +142,7 @@ def twitter_postgres_dag():
             user_tweet[user_name]["USER_INFO"]['followers_count'] = extracted_followers_count
             user_tweet[user_name]["USER_INFO"]['following_count'] = extracted_following_count
             user_tweet[user_name]["USER_INFO"]['created_at'] = extracted_created_at
-            user_tweet[user_name]["USER_INFO"]['description'] = extracted_description
+            user_tweet[user_name]["USER_INFO"]['description'] = extracted_description.replace("'",'')
 
             tweets.append(user_tweet)
 
@@ -149,20 +155,27 @@ def twitter_postgres_dag():
 
     @task()
     def insert_data(data):
-        state = Fasle
+        state = False
         hook = PostgresHook(postgres_conn_id ='postgres_localhost')
 
         for tweet_data in data :
             try:
+                print('insert data {}'.format(tweet_data))
                  # TODO fix
-                query = "INSERT INTO tweets VALUES (\'{}\');".format(tweet_data)
+                import json
+                query = 'INSERT INTO tweets (tweet) VALUES (\'{}\');'.format(json.dumps(tweet_data))
                 hook.run(query)
                 print('<<<<<<<< Data inserted {}'.format(tweet_data))
                 state = True
             except Exception as e:
+                print('[Error] : {}'.format(e))
+        print('>>> Data inserted ') if state  else print('[ERROR] Failed to insert data')
 
-                print('Error : {}'.format(e))
-        print('>>> Data inserted successfully') if state  else print('[ERROR] Failed to insert data')
+    # insert = PostgresOperator(
+    #     task_id="insert",
+    #     postgres_conn_id="postgres_localhost",
+    #     sql="sql/insert.sql",
+    # )
 
 
     twitter_accounts = Variable.get('Tweeter_Accounts').split(',')
