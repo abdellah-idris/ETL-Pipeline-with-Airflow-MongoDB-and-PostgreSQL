@@ -1,10 +1,9 @@
-from datetime import datetime, timedelta
 from airflow.decorators import dag, task
+from airflow.operators.postgres_operator import PostgresOperator
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
-import pymongo
+from datetime import datetime, timedelta
 import tweepy
-
-
 
 # Access variables
 access_key = Variable.get('ACCESS_TOKEN')
@@ -17,40 +16,39 @@ auth = tweepy.OAuthHandler(access_key, access_secret)
 auth.set_access_token(consumer_key, consumer_secret)
 tweet_count = int(Variable.get('Tweets_count'))
 
-mongo_password = Variable.get('MONGO')
-URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
-
-
 def api_connect():
     # Creating an API object
     return tweepy.API(auth)
-
-
-def mongo_connect():
-    print('>>> Creating a MongoDB connection')
-
-    try:
-        client = pymongo.MongoClient(URI, serverSelectionTimeoutMS=10000)
-        return client
-    except Exception:
-        print("ERROR : Unable to connect to mongo server.")
-        raise Exception
-
 
 api = api_connect()
 
 default_args = {
     'owner': 'idris',
     'retries': 5,
-    'retry_delay': timedelta(minutes=5)
+    'retry_delay': timedelta(minutes=2)
 }
 
+@dag(
+    dag_id='dag_with_postgres_operator_v0',
+    default_args=default_args,
+    start_date=datetime(2023, 1, 31),
+    schedule_interval='0 * * * *'
+)
+def twitter_postgres_dag():
 
-@dag(dag_id='twitter_api_v0',
-     default_args=default_args,
-     start_date=datetime(2023, 1, 29),
-     schedule_interval=timedelta(minutes=60))
-def twitter_etl():
+    def create_postgres_table():
+        print('<<< Creating a PostgreSQL table')
+        pg = PostgresOperator(
+            task_id='create_postgres_tablev1',
+            postgres_conn_id='postgres_localhost',
+            sql="""
+                create table if not exists tweets (
+                    id serial NOT NULL PRIMARY KEY,
+                    tweet json NOT NULL
+                );
+            """
+        )
+        pg.execute(context=None)
 
     @task(multiple_outputs=True)
     def extract_transform(users, tweets_count):
@@ -72,9 +70,9 @@ def twitter_etl():
                                        )
             # TODO : Transform the data
             for tweet in tweets:
-                print('Extracted tweet : {}'.format( tweet))
+                print('Extracted tweet : {}'.format(tweet))
 
-                if  user_name not in data.keys():
+                if user_name not in data.keys():
                     data[user_name] = tweet._json['full_text']
                     date[user_name] = tweet.created_at.strftime('%m/%d/%Y:%H:%M')
                 else:
@@ -87,41 +85,23 @@ def twitter_etl():
             created_at[user_name] = user.created_at.strftime('%m/%d/%Y:%H:%M')
             description[user_name] = user.description
 
-        print('Exported data : {}'.format(data) )
+        print('Exported data : {}'.format(data))
         print('>>> Data extracted successfully')
 
         return {
             'data': data,
-            'date' : date,
-            'followers_count' : followers_count,
-            'following_count' : following_count,
-            'created_at' : created_at,
-            'description' : description
+            'date': date,
+            'followers_count': followers_count,
+            'following_count': following_count,
+            'created_at': created_at,
+            'description': description
         }
 
 
     @task()
-    def clear():
-        print('<<< Clear data from MongoDB')
-        client = mongo_connect()
-        # Select the database and collection
-        print(client.list_database_names())
-
-        db = client['etl']
-        collection = db['NEWS']
-
-        collection.delete_many({})
-        print('>>> Data cleared successfully')
-
-    @task()
-    def load(data, date, followers_count, following_count, created_at, description):
-        print('<<< Loading data into MongoDB')
+    def transform(data, date, followers_count, following_count, created_at, description):
+        print('<<< Loading data into Postgresql')
         tweets = []
-
-        client = mongo_connect()
-        # Select the database and collection
-        db = client['etl']
-        collection = db['NEWS']
 
         # Insert the data into the collection
         for user_name in data.keys():
@@ -161,17 +141,34 @@ def twitter_etl():
             tweets.append(user_tweet)
 
         if tweets is not None:
-            collection.insert_many(tweets)
             print('<<< Data loaded {}'.format(tweets))
-            print('>>> Data loaded successfully')
+            print('>>> send request')
+            return tweets
         else:
             print('>>> [Warning] Empty data : no loaded data ')
-        client.close()
 
-    twitter_accounts= Variable.get('Tweeter_Accounts').split(',')
-    extract_dict = extract_transform(twitter_accounts, tweet_count)
-    clear()
-    load(extract_dict['data'], extract_dict['date'], extract_dict['followers_count'], extract_dict['following_count'], extract_dict['created_at'], extract_dict['description'])
+    @task()
+    def insert_data(data):
+        state = Fasle
+        hook = PostgresHook(postgres_conn_id ='postgres_localhost')
+
+        for tweet_data in data :
+            try:
+                 # TODO fix
+                query = "INSERT INTO tweets VALUES (\'{}\');".format(tweet_data)
+                hook.run(query)
+                print('<<<<<<<< Data inserted {}'.format(tweet_data))
+                state = True
+            except Exception as e:
+
+                print('Error : {}'.format(e))
+        print('>>> Data inserted successfully') if state  else print('[ERROR] Failed to insert data')
 
 
-etl_dag = twitter_etl()
+    twitter_accounts = Variable.get('Tweeter_Accounts').split(',')
+    create_postgres_table()
+    extracted_data = extract_transform(twitter_accounts, tweet_count)
+    data = transform(extracted_data['data'], extracted_data['date'], extracted_data['followers_count'], extracted_data['following_count'], extracted_data['created_at'], extracted_data['description'])
+    insert_data(data)
+
+twitter_postgres_dag = twitter_postgres_dag()
