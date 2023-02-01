@@ -160,12 +160,12 @@ def twitter_etl():
 
             tweets.append(user_tweet)
 
-        if tweets != '' and tweets is not None:
+        if tweets is not None:
             collection.insert_many(tweets)
             print('<<< Data loaded {}'.format(tweets))
             print('>>> Data loaded successfully')
         else:
-            print('Empty data')
+            print('>>> [Warning] Empty data : no loaded data ')
         client.close()
 
     twitter_accounts= Variable.get('Tweeter_Accounts').split(',')
