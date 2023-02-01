@@ -44,7 +44,16 @@ def twitter_postgres_dag():
             sql="""
             CREATE TABLE IF NOT EXISTS  tweets (
                 id SERIAL NOT NULL PRIMARY KEY,
-                tweet json NOT NULL
+                user_name VARCHAR(25) NOT NULL,
+                tweet VARCHAR(255) NOT NULL,
+                created_at Date
+                );
+             CREATE TABLE IF NOT EXISTS  users (
+                user_name VARCHAR(25) NOT NULL PRIMARY KEY,
+                followers_count INT NOT NULL,
+                following_count INT NOT NULL,
+                created_at Date,
+                description VARCHAR
                 );
             """,
         )
@@ -155,27 +164,36 @@ def twitter_postgres_dag():
 
     @task()
     def insert_data(data):
+        import json
         state = False
         hook = PostgresHook(postgres_conn_id ='postgres_localhost')
 
         for tweet_data in data :
             try:
                 print('insert data {}'.format(tweet_data))
-                 # TODO fix
-                import json
-                query = 'INSERT INTO tweets (tweet) VALUES (\'{}\');'.format(json.dumps(tweet_data))
-                hook.run(query)
+                print('keys : {}'.format(tweet_data.keys()))
+                user_name = list(tweet_data.keys())[0]
+                followers_count = tweet_data[user_name]["USER_INFO"]['followers_count']
+                following_count = tweet_data[user_name]["USER_INFO"]['following_count']
+                created_at = tweet_data[user_name]["USER_INFO"]['created_at']
+                description = tweet_data[user_name]["USER_INFO"]['description']
+
+                print(user_name,followers_count,following_count,created_at,description)
+
+                user_query = 'INSERT INTO users (user_name, followers_count, following_count, created_at, description) VALUES (\'{}\',\'{}\',\'{}\',\'{}\',\'{}\');'.format(user_name, followers_count, following_count, created_at, description )
+                hook.run(user_query)
+
+                for tweet, created_at in zip(tweet_data [user_name]['TWEET_INFO']['text'], tweet_data [user_name]['TWEET_INFO']['created_at']):
+                    print(user_name,tweet,created_at)
+                    tweets_query = 'INSERT INTO tweets (user_name, tweet, created_at) VALUES (\'{}\',\'{}\',\'{}\');'.format(user_name,tweet, created_at )
+                    hook.run(tweets_query)
+
                 print('<<<<<<<< Data inserted {}'.format(tweet_data))
                 state = True
+
             except Exception as e:
                 print('[Error] : {}'.format(e))
         print('>>> Data inserted ') if state  else print('[ERROR] Failed to insert data')
-
-    # insert = PostgresOperator(
-    #     task_id="insert",
-    #     postgres_conn_id="postgres_localhost",
-    #     sql="sql/insert.sql",
-    # )
 
 
     twitter_accounts = Variable.get('Tweeter_Accounts').split(',')
