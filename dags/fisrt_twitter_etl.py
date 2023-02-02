@@ -1,44 +1,38 @@
 from datetime import timedelta
-import pymongo
-import tweepy
 import pendulum
 from airflow import DAG
-from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 from airflow.models import Variable
 
 
 
-access_key = Variable.get('ACCESS_TOKEN')
-access_secret = Variable.get('ACCESS_TOKEN_SECRET')
-consumer_key = Variable.get('CONSUMER_KEY')
-consumer_secret = Variable.get('CONSUMER_SECRET')
-
-# Twitter authentication
-auth = tweepy.OAuthHandler(access_key, access_secret)
-auth.set_access_token(consumer_key, consumer_secret)
-
-mongo_password = Variable.get('MONGO')
-URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
-
-
 def api_connect():
+    import tweepy
+    # Twitter authentication
+    access_key = Variable.get('ACCESS_TOKEN')
+    access_secret = Variable.get('ACCESS_TOKEN_SECRET')
+    consumer_key = Variable.get('CONSUMER_KEY')
+    consumer_secret = Variable.get('CONSUMER_SECRET')
+
+    auth = tweepy.OAuthHandler(access_key, access_secret)
+    auth.set_access_token(consumer_key, consumer_secret)
     # Creating an API object
     return tweepy.API(auth)
 
 
 def mongo_connect():
+    import pymongo
     print('Creating a MongoDB connection')
     try:
+        mongo_password = Variable.get('MONGO')
+        URI = 'mongodb+srv://dola:{}@mycluster.hlqcjlo.mongodb.net/?retryWrites=true&w=majority'.format(mongo_password)
         client = pymongo.MongoClient(URI, serverSelectionTimeoutMS=10000)
         return client
     except Exception:
         print("Unable to connect to mongo server.")
         raise Exception
 
-
 api = api_connect()
-
 
 def extract_impl(user_name, tweets_count, ti):
     # get user tweets
@@ -92,8 +86,8 @@ def load_impl(ti):
 
 default_args = {
     'owner': 'idris',
-    'retries': 5,
-    'retry_delay': timedelta(minutes=10)
+    'retries': 3,
+    'retry_delay': timedelta(minutes=5)
 }
 
 with DAG(

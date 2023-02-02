@@ -3,35 +3,33 @@ from airflow.operators.postgres_operator import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
 from datetime import datetime, timedelta
-import tweepy
 
-# Access variables
-access_key = Variable.get('ACCESS_TOKEN')
-access_secret = Variable.get('ACCESS_TOKEN_SECRET')
-consumer_key = Variable.get('CONSUMER_KEY')
-consumer_secret = Variable.get('CONSUMER_SECRET')
-
-# Twitter authentication
-auth = tweepy.OAuthHandler(access_key, access_secret)
-auth.set_access_token(consumer_key, consumer_secret)
-tweet_count = int(Variable.get('Tweets_count'))
 
 def api_connect():
-    # Creating an API object
+    import tweepy
+
+    # Access variables
+    access_key = Variable.get('ACCESS_TOKEN')
+    access_secret = Variable.get('ACCESS_TOKEN_SECRET')
+    consumer_key = Variable.get('CONSUMER_KEY')
+    consumer_secret = Variable.get('CONSUMER_SECRET')
+
+    auth = tweepy.OAuthHandler(access_key, access_secret)
+    auth.set_access_token(consumer_key, consumer_secret)
     return tweepy.API(auth)
 
 api = api_connect()
 
 default_args = {
     'owner': 'idris',
-    'retries': 5,
-    'retry_delay': timedelta(minutes=2)
+    'retries': 3,
+    'retry_delay': timedelta(minutes=5)
 }
 
 @dag(
-    dag_id='dag_with_postgres_operator_v0',
+    dag_id='twitter_dag_with_PostgreSQL',
     default_args=default_args,
-    start_date=datetime(2023, 1, 31),
+    start_date=datetime(2023, 2, 2),
     schedule_interval='0 * * * *'
 )
 def twitter_postgres_dag():
@@ -69,7 +67,6 @@ def twitter_postgres_dag():
         created_at = {}
         description = {}
         for user_name in users:
-
             print('Extracting tweets from user: {}'.format(user_name))
             # get user tweets
             tweets = api.user_timeline(screen_name='@{}'.format(user_name),
@@ -77,7 +74,7 @@ def twitter_postgres_dag():
                                        include_rts=False,
                                        tweet_mode='extended'
                                        )
-            # TODO : Transform the data
+
             for tweet in tweets:
                 print('Extracted tweet : {}'.format(tweet))
 
@@ -94,7 +91,7 @@ def twitter_postgres_dag():
             created_at[user_name] = user.created_at.strftime('%m/%d/%Y:%H:%M')
             description[user_name] = user.description
 
-        print('Exported data : {}'.format(data))
+        print('Extracted data : {}'.format(data))
         print('>>> Data extracted successfully')
 
         return {
@@ -138,12 +135,8 @@ def twitter_postgres_dag():
             extracted_description = description[user_name]
 
             for tweet in extracted_tweet:
-
-                print('tweet before: {}'.format(tweet))
                 tweet = re.sub(r"'", r'', tweet)
-                print('tweet after: {}'.format(tweet))
                 user_tweet[user_name]['TWEET_INFO']['text'].append(tweet)
-
 
             for created_at_date in extracted_date:
                 user_tweet[user_name]["TWEET_INFO"]['created_at'].append(created_at_date)
@@ -156,22 +149,20 @@ def twitter_postgres_dag():
             tweets.append(user_tweet)
 
         if tweets is not None:
-            print('<<< Data loaded {}'.format(tweets))
-            print('>>> send request')
+            print('>>> Data loaded {}'.format(tweets))
             return tweets
         else:
-            print('>>> [Warning] Empty data : no loaded data ')
+            print('>>> [Warning] Empty data : No loaded data ')
 
     @task()
-    def insert_data(data):
-        import json
-        state = False
+    def load(data):
+        print('<<< Loading Data into PostgreSQL')
+        state = True
         hook = PostgresHook(postgres_conn_id ='postgres_localhost')
 
         for tweet_data in data :
             try:
                 print('insert data {}'.format(tweet_data))
-                print('keys : {}'.format(tweet_data.keys()))
                 user_name = list(tweet_data.keys())[0]
                 followers_count = tweet_data[user_name]["USER_INFO"]['followers_count']
                 following_count = tweet_data[user_name]["USER_INFO"]['following_count']
@@ -188,18 +179,19 @@ def twitter_postgres_dag():
                     tweets_query = 'INSERT INTO tweets (user_name, tweet, created_at) VALUES (\'{}\',\'{}\',\'{}\');'.format(user_name,tweet, created_at )
                     hook.run(tweets_query)
 
-                print('<<<<<<<< Data inserted {}'.format(tweet_data))
-                state = True
-
+                print('<<<<<<<< Data Loaded {}'.format(tweet_data))
             except Exception as e:
+                state = False
                 print('[Error] : {}'.format(e))
-        print('>>> Data inserted ') if state  else print('[ERROR] Failed to insert data')
 
+        print('>>> All Data inserted ') if state  else print('[ERROR] Failed to insert some data')
 
+    tweet_count = int(Variable.get('Tweets_count'))
     twitter_accounts = Variable.get('Tweeter_Accounts').split(',')
+
     create_postgres_table()
     extracted_data = extract_transform(twitter_accounts, tweet_count)
     data = transform(extracted_data['data'], extracted_data['date'], extracted_data['followers_count'], extracted_data['following_count'], extracted_data['created_at'], extracted_data['description'])
-    insert_data(data)
+    load(data)
 
 twitter_postgres_dag = twitter_postgres_dag()
