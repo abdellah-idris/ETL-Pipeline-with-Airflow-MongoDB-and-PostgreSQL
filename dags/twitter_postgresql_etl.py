@@ -27,9 +27,9 @@ default_args = {
 }
 
 @dag(
-    dag_id='dag_with_postgres_operator_v0',
+    dag_id='twitter_dag_with_PostgreSQL',
     default_args=default_args,
-    start_date=datetime(2023, 1, 31),
+    start_date=datetime(2023, 2, 2),
     schedule_interval='0 * * * *'
 )
 def twitter_postgres_dag():
@@ -74,7 +74,7 @@ def twitter_postgres_dag():
                                        include_rts=False,
                                        tweet_mode='extended'
                                        )
-            # TODO : Transform the data
+
             for tweet in tweets:
                 print('Extracted tweet : {}'.format(tweet))
 

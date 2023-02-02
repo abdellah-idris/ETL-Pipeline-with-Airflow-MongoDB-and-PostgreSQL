@@ -42,10 +42,10 @@ default_args = {
 }
 
 
-@dag(dag_id='twitter_api_v0',
+@dag(dag_id='twitter_dag_with_mongoDB',
      default_args=default_args,
-     start_date=datetime(2023, 1, 29),
-     schedule_interval=timedelta(minutes=60))
+     start_date=datetime(2023, 2, 2),
+     schedule_interval='0 * * * *')
 def twitter_etl():
 
     @task(multiple_outputs=True)
