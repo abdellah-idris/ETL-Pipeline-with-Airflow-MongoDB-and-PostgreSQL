@@ -2,6 +2,7 @@
 
 <p align="center">
   <a href="#about">About</a> •
+  <a href="#pipeline">Pipeline</a> •
   <a href="#scenario">Scenario</a> •
   <a href="#prerequisites">Prerequisites</a> •
   <a href="#set-up">Set-up</a> •
