@@ -21,7 +21,7 @@ Educational project on how to build an ETL (Extract, Transform, Load) data pipel
  
 The data is extracted from Twitter. It is then transformed/processed with Python and loaded/stored in  **MongoDB** and in **PostgreSQl**.
 
-**MongoDB**  is used as a Database in which json files are stored. Before a load, data are cleaned.
+**MongoDB**  is used as a Database in which json files are stored. Before a load, the database is cleared.
 
 **PostgreSQL** is used as Database with two tables : users and tweets. Data are not cleaned.
 
