@@ -23,7 +23,7 @@ The data is extracted from Twitter. It is then transformed/processed with Python
 
 **MongoDB**  is used as a Database in which json files are stored. Before a load, the database is cleared.
 
-**PostgreSQL** is used as Database with two tables : users and tweets. Data are not cleaned.
+**PostgreSQL** is used as Database with two tables : users and tweets. Data are not cleared.
 
 ## Pipeline
 
