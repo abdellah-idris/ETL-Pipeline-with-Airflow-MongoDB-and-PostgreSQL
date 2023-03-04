@@ -185,6 +185,3 @@ Load the processed data.
 - Airflow installation and setup
 - Scrape data from Amazon website, as the first idea was  to follow prices evolution of a product.
 
-## Next Steps
-
-- Implementing the UI with flask. 
